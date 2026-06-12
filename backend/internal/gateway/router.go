@@ -13,11 +13,12 @@ type Dependencies struct {
 }
 
 func RegisterRoutes(r *chi.Mux, deps *Dependencies) {
+	if deps == nil {
+		panic("gateway.RegisterRoutes: deps must not be nil")
+	}
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", healthCheck)
-		if deps != nil && deps.IdentityHandler != nil {
-			deps.IdentityHandler.RegisterRoutes(r)
-		}
+		deps.IdentityHandler.RegisterRoutes(r)
 	})
 }
 

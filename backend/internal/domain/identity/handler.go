@@ -2,6 +2,8 @@ package identity
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -31,19 +33,18 @@ type loginRequest struct {
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	resp, err := h.service.AuthenticateUser(r.Context(), req.Email, req.Password)
 	if err != nil {
-		http.Error(w, `{"error":"invalid credentials"}`, http.StatusUnauthorized)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 type registerRequest struct {
@@ -54,8 +55,8 @@ type registerRequest struct {
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
@@ -65,31 +66,35 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		http.Error(w, `{"error":"registration failed"}`, http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrValidation) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(user)
+	writeJSON(w, http.StatusCreated, user)
 }
 
 func (h *Handler) registerAgent(w http.ResponseWriter, r *http.Request) {
 	var input CreateAgentInput
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	resp, err := h.service.RegisterAgent(r.Context(), input)
 	if err != nil {
-		http.Error(w, `{"error":"agent registration failed"}`, http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrValidation) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (h *Handler) authenticateAgent(w http.ResponseWriter, r *http.Request) {
@@ -97,34 +102,40 @@ func (h *Handler) authenticateAgent(w http.ResponseWriter, r *http.Request) {
 		AgentID string `json:"agent_id"`
 		APIKey  string `json:"api_key"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	agentID, err := uuid.Parse(req.AgentID)
 	if err != nil {
-		http.Error(w, `{"error":"invalid agent id"}`, http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent id"})
 		return
 	}
 
 	resp, err := h.service.AuthenticateAgent(r.Context(), agentID, req.APIKey)
 	if err != nil {
-		http.Error(w, `{"error":"authentication failed"}`, http.StatusUnauthorized)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication failed"})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) listRoles(w http.ResponseWriter, r *http.Request) {
 	roles, err := h.service.ListRoles(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"failed to list roles"}`, http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list roles"})
 		return
 	}
 
+	writeJSON(w, http.StatusOK, roles)
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(roles)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("writeJSON error: %v", err)
+	}
 }
