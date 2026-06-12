@@ -60,15 +60,21 @@ func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, erro
 	return user, nil
 }
 
-func (r *Repository) CreateAgent(ctx context.Context, input CreateAgentInput) (*AIAgent, error) {
+func (r *Repository) CreateAgent(ctx context.Context, input CreateAgentInput) (*AIAgent, string, error) {
 	apiKey := uuid.New().String()
 	keyHash, err := bcrypt.GenerateFromPassword([]byte(apiKey), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, fmt.Errorf("hash api key: %w", err)
+		return nil, "", fmt.Errorf("hash api key: %w", err)
 	}
 
-	capJSON, _ := json.Marshal(input.Capabilities)
-	metaJSON, _ := json.Marshal(input.Metadata)
+	capJSON, err := json.Marshal(input.Capabilities)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal capabilities: %w", err)
+	}
+	metaJSON, err := json.Marshal(input.Metadata)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal metadata: %w", err)
+	}
 
 	agent := &AIAgent{}
 	err = r.db.QueryRow(ctx,
@@ -78,11 +84,15 @@ func (r *Repository) CreateAgent(ctx context.Context, input CreateAgentInput) (*
 		input.Name, input.ModelType, string(keyHash), capJSON, input.PermissionLevel, metaJSON,
 	).Scan(&agent.ID, &agent.Name, &agent.ModelType, &agent.APIKeyHash, &capJSON, &agent.PermissionLevel, &metaJSON, &agent.IsActive, &agent.CreatedAt, &agent.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("create agent: %w", err)
+		return nil, "", fmt.Errorf("create agent: %w", err)
 	}
-	json.Unmarshal(capJSON, &agent.Capabilities)
-	json.Unmarshal(metaJSON, &agent.Metadata)
-	return agent, nil
+	if err := json.Unmarshal(capJSON, &agent.Capabilities); err != nil {
+		return nil, "", fmt.Errorf("unmarshal capabilities: %w", err)
+	}
+	if err := json.Unmarshal(metaJSON, &agent.Metadata); err != nil {
+		return nil, "", fmt.Errorf("unmarshal metadata: %w", err)
+	}
+	return agent, apiKey, nil
 }
 
 func (r *Repository) GetAgentByID(ctx context.Context, id uuid.UUID) (*AIAgent, error) {
@@ -95,8 +105,12 @@ func (r *Repository) GetAgentByID(ctx context.Context, id uuid.UUID) (*AIAgent, 
 	if err != nil {
 		return nil, fmt.Errorf("get agent by id: %w", err)
 	}
-	json.Unmarshal(capJSON, &agent.Capabilities)
-	json.Unmarshal(metaJSON, &agent.Metadata)
+	if err := json.Unmarshal(capJSON, &agent.Capabilities); err != nil {
+		return nil, fmt.Errorf("unmarshal capabilities: %w", err)
+	}
+	if err := json.Unmarshal(metaJSON, &agent.Metadata); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
+	}
 	return agent, nil
 }
 
@@ -115,8 +129,13 @@ func (r *Repository) ListRoles(ctx context.Context) ([]Role, error) {
 		if err := rows.Scan(&role.ID, &role.Name, &role.RoleType, &role.Description, &permJSON); err != nil {
 			return nil, fmt.Errorf("scan role: %w", err)
 		}
-		json.Unmarshal(permJSON, &role.Permissions)
+		if err := json.Unmarshal(permJSON, &role.Permissions); err != nil {
+			return nil, fmt.Errorf("unmarshal role permissions: %w", err)
+		}
 		roles = append(roles, role)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list roles iteration: %w", err)
 	}
 	return roles, nil
 }
