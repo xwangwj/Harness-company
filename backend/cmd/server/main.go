@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harness-org/backend/internal/domain/capability"
+	"github.com/harness-org/backend/internal/domain/evolution"
 	"github.com/harness-org/backend/internal/domain/governance"
 	"github.com/harness-org/backend/internal/domain/identity"
 	"github.com/harness-org/backend/internal/domain/layer"
@@ -71,6 +72,10 @@ func main() {
 	govSvc := governance.NewService(govRepo)
 	govHandler := governance.NewHandler(govSvc)
 
+	evoRepo := evolution.NewRepository(db)
+	evoSvc := evolution.NewService(evoRepo)
+	evoHandler := evolution.NewHandler(evoSvc)
+
 	router := server.NewRouter(cfg.CorsOrigins)
 	gateway.RegisterRoutes(router, &gateway.Dependencies{
 		IdentityHandler:       identHandler,
@@ -81,6 +86,7 @@ func main() {
 		ObservabilityHandler:  obsHandler,
 		VerificationHandler:   verHandler,
 		GovernanceHandler:     govHandler,
+		EvolutionHandler:      evoHandler,
 	})
 
 	srv := server.New(router, cfg.ServerPort)

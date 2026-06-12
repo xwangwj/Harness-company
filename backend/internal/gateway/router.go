@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/harness-org/backend/internal/domain/capability"
+	"github.com/harness-org/backend/internal/domain/evolution"
 	"github.com/harness-org/backend/internal/domain/governance"
 	"github.com/harness-org/backend/internal/domain/identity"
 	"github.com/harness-org/backend/internal/domain/layer"
@@ -24,6 +25,7 @@ type Dependencies struct {
 	ObservabilityHandler  *observability.Handler
 	VerificationHandler   *verification.Handler
 	GovernanceHandler     *governance.Handler
+	EvolutionHandler      *evolution.Handler
 }
 
 func RegisterRoutes(r *chi.Mux, deps *Dependencies) {
@@ -53,6 +55,9 @@ func RegisterRoutes(r *chi.Mux, deps *Dependencies) {
 		}
 		if deps.GovernanceHandler != nil {
 			deps.GovernanceHandler.RegisterRoutes(r)
+		}
+		if deps.EvolutionHandler != nil {
+			deps.EvolutionHandler.RegisterRoutes(r)
 		}
 	})
 }
