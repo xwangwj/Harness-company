@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/harness-org/backend/internal/domain/identity"
+	"github.com/harness-org/backend/internal/domain/layer"
 	"github.com/harness-org/backend/internal/domain/organization"
 	"github.com/harness-org/backend/internal/gateway"
 	"github.com/harness-org/backend/internal/pkg/config"
@@ -41,10 +42,15 @@ func main() {
 	orgSvc := organization.NewService(orgRepo)
 	orgHandler := organization.NewHandler(orgSvc)
 
+	layerRepo := layer.NewRepository(db)
+	layerClassifier := layer.NewClassifierService(layerRepo)
+	layerHandler := layer.NewHandler(layerClassifier)
+
 	router := server.NewRouter(cfg.CorsOrigins)
 	gateway.RegisterRoutes(router, &gateway.Dependencies{
 		IdentityHandler:     identHandler,
 		OrganizationHandler: orgHandler,
+		LayerHandler:        layerHandler,
 	})
 
 	srv := server.New(router, cfg.ServerPort)

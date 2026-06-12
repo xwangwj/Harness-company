@@ -6,12 +6,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/harness-org/backend/internal/domain/identity"
+	"github.com/harness-org/backend/internal/domain/layer"
 	"github.com/harness-org/backend/internal/domain/organization"
 )
 
 type Dependencies struct {
 	IdentityHandler     *identity.Handler
 	OrganizationHandler *organization.Handler
+	LayerHandler        *layer.Handler
 }
 
 func RegisterRoutes(r *chi.Mux, deps *Dependencies) {
@@ -23,6 +25,9 @@ func RegisterRoutes(r *chi.Mux, deps *Dependencies) {
 		deps.IdentityHandler.RegisterRoutes(r)
 		if deps.OrganizationHandler != nil {
 			deps.OrganizationHandler.RegisterRoutes(r)
+		}
+		if deps.LayerHandler != nil {
+			deps.LayerHandler.RegisterRoutes(r)
 		}
 	})
 }
