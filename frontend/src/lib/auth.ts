@@ -1,0 +1,23 @@
+const TOKEN_KEY = 'harness_token'
+const USER_KEY = 'harness_user'
+
+export function setSession(token: string, userId: string, userType: string): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(USER_KEY, JSON.stringify({ id: userId, type: userType }))
+}
+
+export function getToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function clearSession(): void {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+}
+
+export function isAuthenticated(): boolean {
+  return !!getToken()
+}
