@@ -7,18 +7,20 @@ import (
 )
 
 type Config struct {
-	ServerPort    int
-	DatabaseURL   string
-	JWTSecret     string
-	CorsOrigins   []string
+	ServerPort     int
+	DatabaseURL    string
+	JWTSecret      string
+	CorsOrigins    []string
+	MigrationsPath string
 }
 
 func Load() *Config {
 	return &Config{
-		ServerPort:    getEnvInt("SERVER_PORT", 8080),
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/harness_org?sslmode=disable"),
-		JWTSecret:     getEnv("JWT_SECRET", "dev-secret-change-in-production"),
-		CorsOrigins:   getEnvSlice("CORS_ORIGINS", "http://localhost:3000"),
+		ServerPort:     getEnvInt("SERVER_PORT", 8080),
+		DatabaseURL:    getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/harness_org?sslmode=disable"),
+		JWTSecret:      getEnv("JWT_SECRET", "dev-secret-change-in-production"),
+		CorsOrigins:    getEnvSlice("CORS_ORIGINS", "http://localhost:3000"),
+		MigrationsPath: getEnv("MIGRATIONS_PATH", "migrations"),
 	}
 }
 

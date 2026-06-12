@@ -11,6 +11,15 @@ import (
 )
 
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrationsDir string) error {
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			filename    VARCHAR(255) PRIMARY KEY,
+			applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`); err != nil {
+		return fmt.Errorf("create migration tracking table: %w", err)
+	}
+
 	files, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		return fmt.Errorf("read migrations dir: %w", err)
@@ -25,13 +34,44 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, migrationsDir string
 	sort.Strings(sqlFiles)
 
 	for _, f := range sqlFiles {
+		if f == "schema_migrations.sql" {
+			continue
+		}
+
+		var applied bool
+		err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename = $1)", f).Scan(&applied)
+		if err != nil {
+			return fmt.Errorf("check migration %s: %w", f, err)
+		}
+		if applied {
+			fmt.Printf("migration skipped (already applied): %s\n", f)
+			continue
+		}
+
 		content, err := os.ReadFile(filepath.Join(migrationsDir, f))
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", f, err)
 		}
-		if _, err := pool.Exec(ctx, string(content)); err != nil {
+
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin transaction for %s: %w", f, err)
+		}
+
+		if _, err := tx.Exec(ctx, string(content)); err != nil {
+			tx.Rollback(ctx)
 			return fmt.Errorf("execute migration %s: %w", f, err)
 		}
+
+		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations (filename) VALUES ($1)", f); err != nil {
+			tx.Rollback(ctx)
+			return fmt.Errorf("record migration %s: %w", f, err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit migration %s: %w", f, err)
+		}
+
 		fmt.Printf("migration applied: %s\n", f)
 	}
 	return nil

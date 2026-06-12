@@ -17,16 +17,17 @@ import (
 
 func main() {
 	cfg := config.Load()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
-	db, err := database.Connect(ctx, cfg.DatabaseURL)
+	connCtx, connCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer connCancel()
+
+	db, err := database.Connect(connCtx, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("database connection failed: %v", err)
 	}
 	defer db.Close()
 
-	if err := database.RunMigrations(ctx, db, "migrations"); err != nil {
+	if err := database.RunMigrations(context.Background(), db, cfg.MigrationsPath); err != nil {
 		log.Fatalf("migrations failed: %v", err)
 	}
 
