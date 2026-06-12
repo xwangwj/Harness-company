@@ -13,6 +13,7 @@ import (
 	"github.com/harness-org/backend/internal/domain/identity"
 	"github.com/harness-org/backend/internal/domain/layer"
 	"github.com/harness-org/backend/internal/domain/organization"
+	"github.com/harness-org/backend/internal/domain/verification"
 	"github.com/harness-org/backend/internal/domain/workflow"
 	"github.com/harness-org/backend/internal/gateway"
 	"github.com/harness-org/backend/internal/pkg/config"
@@ -56,6 +57,10 @@ func main() {
 	wfSvc := workflow.NewService(wfRepo)
 	wfHandler := workflow.NewHandler(wfSvc)
 
+	verRepo := verification.NewRepository(db)
+	verSvc := verification.NewService(verRepo)
+	verHandler := verification.NewHandler(verSvc)
+
 	router := server.NewRouter(cfg.CorsOrigins)
 	gateway.RegisterRoutes(router, &gateway.Dependencies{
 		IdentityHandler:     identHandler,
@@ -63,6 +68,7 @@ func main() {
 		LayerHandler:        layerHandler,
 		CapabilityHandler:   capHandler,
 		WorkflowHandler:     wfHandler,
+		VerificationHandler: verHandler,
 	})
 
 	srv := server.New(router, cfg.ServerPort)
