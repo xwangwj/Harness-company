@@ -1,4 +1,4 @@
-# HarnessCompany - 自进化组织管理系统
+# meta-org - 自进化组织管理系统
 
 一个面向混合人力（人类员工 + AI Agent）的自进化组织管理平台，基于 **ETCLOVG** 框架（Execution, Tooling, Context, Lifecycle, Observability, Verification, Governance）构建。
 
