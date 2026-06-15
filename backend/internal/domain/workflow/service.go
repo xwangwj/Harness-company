@@ -31,6 +31,15 @@ func (s *Service) CreateTemplate(ctx context.Context, input CreateWorkflowInput)
 	if input.AssigneeType == "" {
 		input.AssigneeType = "either"
 	}
+	if input.RoutingRules == nil {
+		input.RoutingRules = map[string]any{}
+	}
+	if input.VisualGraph == nil {
+		input.VisualGraph = map[string]any{}
+	}
+	for i := range input.Stages {
+		normalizeStage(&input.Stages[i])
+	}
 	return s.repo.CreateTemplate(ctx, input)
 }
 
@@ -51,30 +60,7 @@ func (s *Service) StartWorkflow(ctx context.Context, input StartWorkflowInput) (
 		input.Context = map[string]any{}
 	}
 
-	inst, err := s.repo.CreateInstance(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-
-	for i, stage := range tmpl.Stages {
-		task := &Task{
-			WorkflowID:     inst.ID,
-			Stage:          i,
-			StageType:      stage.Type,
-			AssigneeType:   stage.AssigneeType,
-			Input:          input.Context,
-			WeightSnapshot: tmpl.RequiredWeight,
-			Status:         TaskPending,
-		}
-		if i == 0 {
-			task.Status = TaskAssigned
-		}
-		if _, err := s.repo.CreateTask(ctx, task); err != nil {
-			return nil, fmt.Errorf("create task for stage %d: %w", i, err)
-		}
-	}
-
-	return inst, nil
+	return s.repo.CreateInstanceWithTasks(ctx, input, tmpl)
 }
 
 func (s *Service) GetWorkflow(ctx context.Context, id uuid.UUID) (*WorkflowInstance, error) {
@@ -90,34 +76,18 @@ func (s *Service) GetWorkflow(ctx context.Context, id uuid.UUID) (*WorkflowInsta
 	return inst, nil
 }
 
+func (s *Service) UpdateWorkflowStatus(ctx context.Context, id uuid.UUID, status WorkflowStatus) error {
+	if !isValidWorkflowStatus(status) {
+		return fmt.Errorf("%w: invalid workflow status", ErrValidation)
+	}
+	return s.repo.UpdateInstanceStatus(ctx, id, status)
+}
+
 func (s *Service) CompleteTask(ctx context.Context, taskID uuid.UUID, output map[string]any) error {
-	task, err := s.repo.GetTaskByID(ctx, taskID)
-	if err != nil {
-		return fmt.Errorf("get task: %w", err)
+	if output == nil {
+		output = map[string]any{}
 	}
-	if err := s.repo.UpdateTaskStatus(ctx, taskID, TaskCompleted, output); err != nil {
-		return err
-	}
-
-	inst, err := s.repo.GetInstance(ctx, task.WorkflowID)
-	if err != nil {
-		return err
-	}
-
-	nextStage := inst.CurrentStage + 1
-	if err := s.repo.UpdateInstanceStage(ctx, inst.ID, nextStage); err != nil {
-		return err
-	}
-
-	tmpl, err := s.repo.GetTemplate(ctx, inst.TemplateID)
-	if err != nil {
-		return err
-	}
-	if nextStage >= len(tmpl.Stages) {
-		return s.repo.UpdateInstanceStatus(ctx, inst.ID, WorkflowCompleted)
-	}
-
-	return nil
+	return s.repo.CompleteTaskWithWorkflowProgress(ctx, taskID, output)
 }
 
 func (s *Service) RecordDecision(ctx context.Context, taskID uuid.UUID, decisionMakerID uuid.UUID, makerType string, reasoning string, outcome string, input, output map[string]any) (*Decision, error) {
@@ -144,8 +114,41 @@ func (s *Service) UpdateContext(ctx context.Context, wc *WorkflowContext) error 
 
 func defaultStages() []Stage {
 	return []Stage{
-		{Type: StagePlan, Name: "Planning", AssigneeType: "either"},
-		{Type: StageExecute, Name: "Execution", AssigneeType: "either"},
-		{Type: StageReview, Name: "Review", AssigneeType: "either"},
+		{Type: StagePlan, Name: "Planning", AssigneeType: "either", RequiredPermissionLevel: "L1", RiskLevel: "low"},
+		{Type: StageExecute, Name: "Execution", AssigneeType: "either", RequiredPermissionLevel: "L2", RiskLevel: "medium"},
+		{Type: StageReview, Name: "Review", AssigneeType: "internal", RequiredPermissionLevel: "L2", RiskLevel: "medium", PreferredActorTypes: []string{"internal_human"}},
+	}
+}
+
+func normalizeStage(stage *Stage) {
+	if stage.Name == "" {
+		stage.Name = string(stage.Type)
+	}
+	if stage.ID == "" {
+		stage.ID = string(stage.Type) + "-" + stage.Name
+	}
+	if stage.AssigneeType == "" {
+		stage.AssigneeType = "either"
+	}
+	if stage.RequiredPermissionLevel == "" {
+		stage.RequiredPermissionLevel = "L1"
+	}
+	if stage.RiskLevel == "" {
+		stage.RiskLevel = "low"
+	}
+	if stage.EvaluationPolicy == nil {
+		stage.EvaluationPolicy = map[string]any{"primary_reviewer": "human"}
+	}
+	if stage.MatchingPolicy == nil {
+		stage.MatchingPolicy = map[string]any{"ranking": "capability_weight_access"}
+	}
+}
+
+func isValidWorkflowStatus(status WorkflowStatus) bool {
+	switch status {
+	case WorkflowActive, WorkflowPaused, WorkflowCompleted, WorkflowFailed:
+		return true
+	default:
+		return false
 	}
 }
